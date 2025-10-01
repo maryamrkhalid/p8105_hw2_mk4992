@@ -1,0 +1,26 @@
+---
+title: "P8105 HW2 – mk4992"
+author: "Maryam Khalid"
+date: "2025-10-01"
+output:
+  github_document:
+    toc: true
+    toc_depth: 2
+editor_options:
+  chunk_output_type: console
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+set.seed(8105)
+
+library(tidyverse)  
+library(janitor)    
+library(lubridate)  
+
+## R Markdown
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
