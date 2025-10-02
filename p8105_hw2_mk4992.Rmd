@@ -8,7 +8,6 @@ output:
     toc_depth: 2
 editor_options:
   chunk_output_type: console
-
 ---
 
 ```{r setup, include=FALSE}
@@ -19,8 +18,198 @@ library(tidyverse)
 library(janitor)    
 library(lubridate)  
 
-## R Markdown
+## Problem 0: This homework follows the required reproducible workflow.
 
 ```
+## Problem 1 GOAL: merge pols-month.csv, unemployment.csv, and snp.csv into a single dataframe using the year and month as keys across datasets.
+
+#Step 1: clean the data in pols-month.csv
+```{r pols-clean}
+pols <- read_csv("data/pols-month.csv") |>
+  clean_names() |> 
+  separate(mon, into = c("year","month","day"), sep = "-", convert = TRUE) |> 
+  mutate(
+    month = month.name[month] |> tolower(),
+    president = case_when(
+      prez_gop == 1 ~ "gop",
+      prez_dem == 1 ~ "dem",
+      TRUE ~ NA_character_
+    )
+  ) |> 
+  select(year, month, president, everything(), -prez_gop, -prez_dem, -day)
+
+# View the cleaned dataset
+pols |> slice_head(n = 10)
+```
+
+#Step 2: clean the data in snp.csv
+```{r snp-clean}
+snp <- read_csv("data/snp.csv") |>
+  clean_names() |> 
+  separate(date, into = c("month","day","year"), sep = "/", convert = TRUE) |> 
+  mutate(
+    year = if_else(year <50, 2000 + year, 1900 + year), #modifies 2-digit years into 4-digits
+    month = month.name[month] |> tolower(),
+  ) |>
+  arrange(year, match(month, tolower(month.name))) |>
+  select(year, month, close)
+
+# View the cleaned dataset
+snp |> slice_head(n = 10)
+```
+
+#Step 3: Clean the data in unemployment.csv
+
+```{r unemp-clean}
+unemp <- read_csv("data/unemployment.csv") |>
+  clean_names() |>
+  pivot_longer(
+    cols = -year,
+    names_to  = "month",
+    values_to = "unemployment_rate"
+  ) |>
+  mutate(
+    # map jan→january, feb→february, etc.
+    month = case_match(
+      month,
+      "jan" ~ "january",   "feb" ~ "february", "mar" ~ "march",
+      "apr" ~ "april",     "may" ~ "may",      "jun" ~ "june",
+      "jul" ~ "july",      "aug" ~ "august",   "sep" ~ "september",
+      "oct" ~ "october",   "nov" ~ "november", "dec" ~ "december"
+    ),
+    # ensure numeric (percent as a number, not character)
+    unemployment_rate = as.numeric(unemployment_rate)
+  ) |>
+  arrange(year, match(month, tolower(month.name)))
+
+# quick peek
+unemp |> slice_head(n = 12)
+```
+
+#Step 4: merge snp into pols, and then merge unemployment into the result
+```{r joins}
+# 1) merge S&P into pols
+pols_snp <- left_join(pols, snp, by = c("year", "month"))
+
+# 2) merge unemployment into the result
+pols_snp_unemp <- left_join(pols_snp, unemp, by = c("year", "month"))
+
+# quick sanity checks
+dim(pols_snp_unemp)          # rows, cols
+sum(is.na(pols_snp_unemp$close))            # NA in S&P close? 36 months where we don't have S&P value
+sum(is.na(pols_snp_unemp$unemployment_rate))# NA in unemployment? 12 months where we don't have the unemployment rate
+
+pols_snp_unemp |> slice_head(n = 6)
+
+```
+
+The 'pols-month' dataset contains 822 observations of 9 variables related to the # of federal politicians who are Democratic or Republican at any given time (# of governors, senators, house representatives of each party & whether the president at the time was GOP/Dem).
+
+The 'snp' dataset contains 787 observations of 2 variables related to the S&P stock market index, giving us the date of the observation & the closing value of the S&P stock index on that given date.
+
+The 'unemployment' dataset contains 68 observations of 13 variables, in which: the first variable 'Year' contains the 4-digit year in its column, and the other variables are the months Jan through Dec. The values below the month columns indicate the percentage of unemployment in that column's month in that row's year.
+
+Our final 'pols_snp_unemp' dataset allows us to track over time (by each month-year combination): the closing S&P index value, the unemployment rate, and the number of elected politicians of each party in office in various federal positions. Thus, we can take a birds-eye view of the economic and political state of the US at a given month-year in time. 
+
+##Problem 2: 
+
+
+```{r tw-sheets, message=FALSE}
+library(readxl)
+tw_path <- file.path("data", "202509 Trash Wheel Collection Data.xlsx")
+
+```
+
+#Step 1: Clean the datasets
+```{r tw-mr, message=FALSE}
+library(dplyr)
+library(janitor)
+library(stringr)
+library(readxl)
+
+#Mr Trash Wheel
+mr <- read_excel(tw_path, sheet = "Mr. Trash Wheel", skip = 1) |>
+  clean_names() |>
+  select(!contains("notes")) |>
+  filter(!is.na(dumpster)) |>
+  mutate(across(any_of("sports_balls"), ~ as.integer(round(.x)))) |>
+  mutate(
+    wheel = "Mr. Trash Wheel",
+    year  = as.integer(year),
+    month = str_to_title(as.character(month))
+  )
+
+mr |> slice_head(n = 5)
+
+#Professor Trash Wheel
+prof <- read_excel(tw_path, sheet = "Professor Trash Wheel", skip = 1) |>
+  clean_names() |>
+  select(!contains("notes")) |>
+  filter(!is.na(dumpster)) |>
+  mutate(
+    across(any_of("sports_balls"), ~ as.integer(round(.x)))  # only if present
+  ) |>
+  mutate(
+    wheel = "Professor Trash Wheel",
+    year  = as.integer(year),
+    month = str_to_title(as.character(month))
+  )
+
+#Gwynn Falls Trash Wheel
+gwyn <- read_excel(tw_path, sheet = "Gwynns Falls Trash Wheel", skip = 1) |>
+  clean_names() |>
+  select(!contains("notes")) |>
+  filter(!is.na(dumpster)) |>
+  mutate(across(any_of("sports_balls"), ~ as.integer(round(.x)))) |>
+  mutate(
+    wheel = "Gwynnda",
+    year  = as.integer(year),
+    month = str_to_title(as.character(month))
+  )
+
+gwyn |> slice_head(n = 5)
+
+```
+
+
+#Step 2: Combine the datasets altogether
+```{r tw-combine}
+# (Optional) quick check: do columns mostly align?
+# intersect(names(mr), names(prof)) |> setdiff(names(gwyn))
+
+trash <- bind_rows(mr, prof, gwyn) |>
+  select(where(~ !all(is.na(.)))) |>
+  select(
+    wheel, dumpster, month, year, weight_tons, volume_cubic_yards,
+    everything()
+  ) |>
+  arrange(wheel, year, match(month, month.name))
+
+
+# sanity checks
+trash |> count(wheel)
+range(trash$year, na.rm = TRUE)
+trash |> slice_head(n = 5)
+```
+
+```{r tw-summaries}
+
+# (a) Total weight (tons) collected by Professor Trash Wheel
+prof_weight_total_tons <- trash |>
+  dplyr::filter(wheel == "Professor Trash Wheel") |>
+  dplyr::summarise(total_tons = sum(weight_tons, na.rm = TRUE)) |>
+  dplyr::pull(total_tons)
+
+# (b) Total cigarette butts collected by Gwynnda in June 2022
+gwynnda_cigs_june_2022 <- trash |>
+  dplyr::filter(wheel == "Gwynnda", year == 2022, month == "June") |>
+  dplyr::summarise(total_cigs = sum(cigarette_butts, na.rm = TRUE)) |>
+  dplyr::pull(total_cigs)
+
+```
+After cleaning and combining the three datasets of these different trash wheel devices, the dataset has `r nrow(trash)` observations (one per dumpster). Key variables include `month`, `year`, `weight_tons`, `volume_cubic_yards`, and item counts such as `plastic_bottles`, `polystyrene`, `cigarette_butts`, `glass_bottles`, `plastic_bags`, `wrappers`, and `sports_balls`.
+
+**Professor Trash Wheel** collected a total of **`r round(prof_weight_total_tons, 1)` tons** of trash. **Gwynnda** collected **`r format(gwynnda_cigs_june_2022, big.mark = ",")` cigarette butts** in **June 2022**.
+
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
