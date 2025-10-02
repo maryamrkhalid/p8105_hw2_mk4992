@@ -20,7 +20,10 @@ library(janitor)
 library(lubridate)  
 
 ## Problem 0: This homework follows the required reproducible workflow.
-
+knitr::opts_chunk$set(
+  echo = TRUE, message = FALSE, warning = FALSE,
+  fig.path = "figs/"   # <— add this
+)
 ```
 ## Problem 1: FiveThirtyEight US Politics Dataset
 
